@@ -1,0 +1,40 @@
+# ==========================================
+# Git / Source Control
+# ==========================================
+.git
+.gitignore
+.github/
+
+# ==========================================
+# Python Artifacts & Caches
+# ==========================================
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.env
+
+# ==========================================
+# Virtual Environments & Build Artifacts
+# ==========================================
+.venv/
+venv/
+env/
+ENV/
+build/
+dist/
+*.egg-info/
+
+# ==========================================
+# OS / IDE Noise
+# ==========================================
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo

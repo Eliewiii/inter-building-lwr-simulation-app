@@ -1,0 +1,62 @@
+[build-system]
+requires = ["hatchling", "hatch-vcs"]  # 👈 Added hatch-vcs here
+build-backend = "hatchling.build"
+
+[project]
+name = "inter-building-lwr-simulation-app"
+dynamic = ["version"]
+description = "An inter-building long-wave radiation simulation app for energy modeling."
+requires-python = ">=3.12"
+
+[tool.hatch.version]
+source = "vcs"  # 👈 Tells Hatch to look at your Git (VCS) tags
+
+[tool.hatch.build.targets.wheel]
+packages = [ "app"]
+
+[tool.pytest.ini_options]
+minversion = "7.0"
+pythonpath = "."
+testpaths = ["tests/unit","tests/integration"]
+python_files = "test_*.py"
+python_classes = "Test*"
+python_functions = "test_*"
+log_cli = true
+log_cli_level = "INFO"
+addopts = "-v --tb=short"
+markers = [
+    "integration: Marks tests as slow, multi-process integration or system-level suites.",
+    "system: Marks very slow simulation tests of the whole workflow for simple cases.",
+    "simulation: Marks slow simulation tests of the whole workflow for more complex cases.",
+    "debug: Marks tests that are used for debugging and development purposes, not for regular test runs."
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+exclude = [
+    ".venv",
+    "venv",
+    "*.epw",
+    "*.eso",
+    "*.csv",
+    "*.idf"
+]
+
+[tool.ruff.lint]
+# Add "D" to your select list
+select = ["E", "F", "W", "D"]
+
+[tool.ruff.lint.pydocstyle]
+# Enforce a specific convention (e.g., "google", "numpy", or "pep257")
+convention = "google"
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+
+[tool.pyright]
+typeCheckingMode = "basic" # Perfect balance for scientific computing pipelines
+reportMissingTypeStubs = false # Silences errors from legacy packages without stubs
+reportInvalidTypeVarUse = "error"
+reportGeneralTypeIssues = "error"

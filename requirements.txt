@@ -1,0 +1,21 @@
+# --- Web Framework & API ---
+fastapi==0.111.0
+uvicorn[standard]==0.29.0
+python-multipart==0.0.9
+pyjwt==2.8.0
+
+# --- Configuration & Validation ---
+pydantic==2.7.1
+pydantic-settings==2.2.1
+python-dotenv==1.0.1
+
+# --- Background Task Queue ---
+celery==5.4.0
+redis==5.0.4
+
+# --- Core Simulation & Coupling ---
+git+https://github.com/Eliewiii/EP_LWR_coupled_simulation@master
+
+# --- Testing & Linting (Development) ---
+pytest ~= 8.1.0
+ruff ~= 0.5.0
