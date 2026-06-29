@@ -1,5 +1,12 @@
-from celery import chain
+"""Orchestrator engine managing topological pipeline execution, dependency validations, and Celery task chain dispatching."""
 
+from typing import Any, Callable, cast
+
+from celery import chain, signature
+from celery.canvas import Signature
+from celery.result import AsyncResult
+
+from app.config import settings
 from app.schemas import (
     ExecutionState,
     PipelinePhase,
@@ -8,106 +15,205 @@ from app.schemas import (
     TaskContext,
 )
 from app.services.state_manager import get_manifest, update_manifest
-from app.workers.tasks import run_lwr_pre, run_lwr_sim, run_post, run_preproc, run_vf
+from app.workers.tasks import (
+    run_lwr_pre_processing,
+    run_lwr_simulation,
+    run_post_processing,
+    run_pre_processing,
+    run_vf_computation,
+)
 
-PREREQUISITES = {
-    PipelinePhase.PRE_PROCESSING: None,  # Base step, needs nothing
-    PipelinePhase.VF_COMP: PipelinePhase.PRE_PROCESSING,
-    PipelinePhase.LWR_PREPROCESSING: PipelinePhase.VF_COMP,
-    PipelinePhase.LWR_SIMULATION: PipelinePhase.LWR_PREPROCESSING,
-    PipelinePhase.POST_PROCESSING: PipelinePhase.LWR_SIMULATION,
+# 1. Definitive Execution Topology & Field Mapping (Completely String-Free)
+PIPELINE_TOPOLOGY = (
+    (PipelinePhase.PRE_PROCESSING, lambda r: r.run_pre_processing, None),
+    (PipelinePhase.VF_COMPUTATION, lambda r: r.run_vf_comp, PipelinePhase.PRE_PROCESSING),
+    (
+        PipelinePhase.LWR_PRE_PROCESSING,
+        lambda r: r.run_lwr_preprocessing,
+        PipelinePhase.VF_COMPUTATION,
+    ),
+    (
+        PipelinePhase.LWR_SIMULATION,
+        lambda r: r.run_lwr_simulation,
+        PipelinePhase.LWR_PRE_PROCESSING,
+    ),
+    (PipelinePhase.POST_PROCESSING, lambda r: r.run_post_processing, PipelinePhase.LWR_SIMULATION),
+)
+
+TASK_MAP: dict[PipelinePhase, Callable[..., Any]] = {
+    PipelinePhase.PRE_PROCESSING: run_pre_processing,
+    PipelinePhase.VF_COMPUTATION: run_vf_computation,
+    PipelinePhase.LWR_PRE_PROCESSING: run_lwr_pre_processing,
+    PipelinePhase.LWR_SIMULATION: run_lwr_simulation,
+    PipelinePhase.POST_PROCESSING: run_post_processing,
 }
 
 
-def validate_execution_request(manifest: SimulationManifest, requested_phases: list[PipelinePhase]):
-    """_summary_
+def _extract_ordered_phases(request: PipelineRunRequest) -> list[PipelinePhase]:
+    """Evaluate request toggles against the execution matrix to derive an ordered phase list.
+
+    Iterates through the structural pipeline topology matrix sequentially and evaluates
+    the active request flags to determine which steps require scheduling.
 
     Args:
-        manifest (SimulationManifest): _description_
-        requested_phases (List[PipelinePhase]): _description_
-
-    Raises:
-        ValueError: _description_
-        ValueError: _description_
-        ValueError: _description_
+        request (PipelineRunRequest): Incoming data transfer schema tracking active
+            execution phase boolean configurations.
 
     Returns:
-        _type_: _description_
+        list[PipelinePhase]: Collection of filtered pipeline phases arranged in strict
+            topological order.
     """
-    if not requested_phases:
-        raise ValueError("No phases requested.")
+    return [phase for phase, check_flag, _ in PIPELINE_TOPOLOGY if check_flag(request)]
 
-    # 1. Check if ANYTHING is currently running in Celery for this simulation.
-    # We block new requests if Celery is already working on this simulation
-    # to prevent the "Race Condition" crash mentioned earlier.
+
+def _validate_execution_request(
+    manifest: SimulationManifest, ordered_phases: list[PipelinePhase]
+) -> bool:
+    """Validate requested steps against concurrency locks and foundational prerequisites.
+
+    Ensures at least one phase is active, scans the persistence manifest for ongoing
+    asynchronous tasks, and evaluates structural prerequisite dependencies for the entry phase.
+
+    Args:
+        manifest (SimulationManifest): Workspace instance tracking current operational state.
+        ordered_phases (list[PipelinePhase]): Collection of targeted pipeline phases arranged
+            in execution sequence.
+
+    Raises:
+        ValueError: Raised if the ordered phase collection is empty.
+        ValueError: Raised if any phase in the workspace manifest matches an active running or
+            pending execution block state.
+        ValueError: Raised if the foundational prerequisite step for the entry phase is missing
+            or incomplete.
+
+    Returns:
+        bool: True if all system constraint boundaries are successfully verified.
+    """
+    # 1. Structural Guard: Ensure at least one phase toggle was flipped True
+    if not ordered_phases:
+        raise ValueError("No simulation phases were selected for execution.")
+
+    # 2. Concurrency Guard: Block execution if an operation is active
     for phase, state in manifest.phase_statuses.items():
-        if state in [ExecutionState.PENDING, ExecutionState.RUNNING]:
+        if state in (ExecutionState.PENDING, ExecutionState.RUNNING):
             raise ValueError(
-                f"Simulation is currently locked because '{phase.value}' is in progress. "
-                f"Please wait for it to finish before scheduling new steps."
+                f"Simulation workspace is locked: '{phase.value}' is currently {state.value}. "
+                f"Please wait for active workers to complete."
             )
 
-    # 2. Check the prerequisite of the FIRST requested step
-    first_step = requested_phases[0]
-    required_previous_step = PREREQUISITES[first_step]
+    # 3. Prerequisite Check for the entry-point step
+    first_step = ordered_phases[0]
+    prereq = next((p for phase, _, p in PIPELINE_TOPOLOGY if phase == first_step), None)
 
-    if required_previous_step is not None:
-        # If the prerequisite isn't COMPLETED, we reject the request.
-        if manifest.phase_statuses[required_previous_step] != ExecutionState.COMPLETED:
+    if prereq is not None:
+        if manifest.phase_statuses.get(prereq) != ExecutionState.COMPLETED:
             raise ValueError(
-                f"Cannot start '{first_step.value}'. "
-                f"It requires '{required_previous_step.value}' to be completely finished first."
+                f"Cannot execute '{first_step.value}'. "
+                f"The foundational step '{prereq.value}' must be successfully completed first."
             )
 
-    # If we get here, it is 100% safe to build the chain!
     return True
 
 
-TASK_MAP = {
-    PipelinePhase.PRE_PROCESSING: run_preproc,
-    PipelinePhase.VF_COMP: run_vf,
-    PipelinePhase.LWR_PREPROCESSING: run_lwr_pre,
-    PipelinePhase.LWR_SIMULATION: run_lwr_sim,
-    PipelinePhase.POST_PROCESSING: run_post,
-}
+def _set_task_queue(task_sig: Any, queue_name: str) -> Signature:
+    """Safely cast and route a Celery task signature to an explicit infrastructure lane.
 
-
-def schedule_pipeline(user_id: str, sim_id: str, requested_phases: PipelineRunRequest):
-    """_summary_
+    Applies a type assertion wrapper over loose framework signature objects to satisfy
+    static analysis enforcement while mutating the target broker queue property.
 
     Args:
-        user_id (str): _description_
-        sim_id (str): _description_
-        requested_phases (PipelineRunRequest): _description_
+        task_sig (Any): The raw unbound task signature generated by framework helpers.
+        queue_name (str): Operational queue string name resolved from environment parameters.
 
     Returns:
-        _type_: _description_
+        Signature: The strongly typed Celery Canvas signature instance bound to the target queue.
     """
-    manifest = get_manifest(user_id, sim_id)  # Your file reader
+    return cast(Signature, task_sig).set(queue=queue_name)
 
-    # 1. Validate (This ensures the first step is allowed)
-    validate_execution_request(manifest, requested_phases)
 
-    # 2. Update the Manifest to show these are now in the queue
-    for phase in requested_phases:
+def _dispatch_chain(workflow: Any) -> str:
+    """Fire the constructed Celery canvas workflow chain and verify brokerage tracking registration.
+
+    Transmits the asynchronous execution pipeline to the configured message broker and
+    asserts that a valid task identifiers tracking sequence is generated.
+
+    Args:
+        workflow (Any): Composed Celery canvas pipeline link chain object.
+
+    Raises:
+        RuntimeError: Raised if the message broker fails to return a valid execution tracking ID.
+
+    Returns:
+        str: Unique parent identifier string tracking the asynchronous chain workflow context.
+    """
+    result = cast(AsyncResult, workflow.apply_async())
+    if not result.id:
+        raise RuntimeError("Broker failed to provision an execution task ID.")
+    return str(result.id)
+
+
+def _get_dynamic_queue(priority_queue: bool) -> str:
+    """Resolve the destination routing queue string utilizing application environment settings.
+
+    Maps structural priority indicators directly to infrastructure parameters defined
+    within the centralized configuration system.
+
+    Args:
+        priority_queue (bool): Indicator establishing if the task chain targets the accelerated
+        execution lane.
+
+    Returns:
+        str: Target broker channel name resolved from environment variables.
+    """
+    if priority_queue:
+        return settings.celery_fast_lane_queue
+
+    return settings.celery_slow_lane_queue
+
+
+def schedule_pipeline(user_id: str, sim_id: str, request: PipelineRunRequest) -> str:
+    """Register request tasks as an async Celery workflow chain.
+
+    Fetches the localized execution manifest file, evaluates activation toggles, asserts state
+    safety boundaries, mutates workspace state indicators to pending initialization values,
+    constructs the distributed signature chain passing the execution context block link, and
+    dispatches the execution payload to the broker.
+
+    Args:
+        user_id (str): Unique user identifier owning the workspace context.
+        sim_id (str): Unique simulation schema identifier.
+        request (PipelineRunRequest): Data schema tracking active phase execution requests.
+
+    Raises:
+        ValueError: Raised if validation parameters fail against database boundaries or if no steps
+        are selected.
+        RuntimeError: Raised if message broker pipelines fail execution sequence tracking
+        provisioning.
+
+    Returns:
+        str: Unique identifier string tracking the parent canvas chain task instance.
+    """
+    manifest = get_manifest(user_id, sim_id)
+    ordered_phases = _extract_ordered_phases(request)
+
+    _validate_execution_request(manifest, ordered_phases)
+
+    # Update manifest queue state
+    for phase in ordered_phases:
         manifest.phase_statuses[phase] = ExecutionState.PENDING
     update_manifest(user_id, sim_id, manifest)
 
-    # 3. Build the Chain
+    # Construct and dispatch Async Celery Chain
     context = TaskContext(user_id=user_id, simulation_id=sim_id)
     celery_chain_tasks = []
+    queue_name = _get_dynamic_queue(request.priority_queue)
 
-    for i, phase in enumerate(requested_phases):
+    for i, phase in enumerate(ordered_phases):
         task_func = TASK_MAP[phase]
-        if i == 0:
-            # The first task gets the context IDs injected
-            celery_chain_tasks.append(task_func.s(context.model_dump()))
-        else:
-            # Subsequent tasks inherit context from the previous task automatically
-            celery_chain_tasks.append(task_func.s())
+        raw_sig = (
+            signature(task_func, args=(context.model_dump(),)) if i == 0 else signature(task_func)
+        )
 
-    # 4. Fire to Celery
-    workflow = chain(*celery_chain_tasks)
-    result = workflow.apply_async()
+        celery_chain_tasks.append(_set_task_queue(raw_sig, queue_name))
 
-    return result.id
+    return _dispatch_chain(chain(*celery_chain_tasks))

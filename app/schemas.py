@@ -10,7 +10,7 @@ from pydantic import BaseModel, Field
 class PipelineRunRequest(BaseModel):
     """The strict payload accepted by the API to trigger steps."""
 
-    premium_user: bool = Field(default=False, description="Routes to fast_lane if true")
+    priority_queue: bool = Field(default=False, description="Routes to fast_lane if true")
 
     # Flags for which specific steps to execute
     run_pre_processing: bool = False
@@ -89,8 +89,8 @@ class PipelinePhase(str, Enum):
 
     INITIALIZING = "initializing"
     PRE_PROCESSING = "pre_processing"
-    VF_COMP = "vf_comp"
-    LWR_PREPROCESSING = "lwr_preprocessing"
+    VF_COMPUTATION = "vf_computation"
+    LWR_PRE_PROCESSING = "lwr_pre_processing"
     LWR_SIMULATION = "lwr_simulation"
     POST_PROCESSING = "post_processing"
 

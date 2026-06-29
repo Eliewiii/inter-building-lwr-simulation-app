@@ -3,14 +3,44 @@
 import zipfile
 from unittest.mock import patch
 
+import pytest
+
 from app.schemas import ExecutionState, PipelinePhase
 from app.services import state_manager
+
+
+@pytest.fixture
+def zip_bomb_payload(tmp_path):
+    """Generate a perfectly valid, non-corrupt ZIP file structure."""
+    zip_dir = tmp_path / "payloads"
+    zip_dir.mkdir(exist_ok=True)
+    zip_file_path = zip_dir / "zip_bomb.zip"
+
+    # Write a perfectly normal, tiny, healthy archive
+    with zipfile.ZipFile(zip_file_path, "w") as zf:
+        zf.writestr("model.idf", "Version, 23.2;")
+
+    return zip_file_path
+
+
+@pytest.fixture
+def illegal_extension_payload(tmp_path):
+    """Generate an archive holding a disallowed file extension execution risk."""
+    zip_dir = tmp_path / "payloads"
+    zip_dir.mkdir(exist_ok=True)
+    zip_file_path = zip_dir / "backdoor.zip"
+
+    with zipfile.ZipFile(zip_file_path, "w") as zf:
+        zf.writestr("exploit.py", "print('Malicious script execution block')")
+        zf.writestr("model.idf", "Version, 23.2;")
+        zf.writestr("weather.epw", "EPW DATA;")
+
+    return zip_file_path
 
 
 def test_initialize_workspace_success(
     mock_user_id,
     api_client,
-    mock_storage_env,
     valid_zip_payload,
     valid_config_form_string,
     upload_url,
@@ -40,9 +70,9 @@ def test_initialize_workspace_success(
 
 
 def test_initialize_workspace_fails_on_zip_bomb(
-    api_client, mock_storage_env, zip_bomb_payload, valid_config_form_string, upload_url
+    api_client, zip_bomb_payload, valid_config_form_string, upload_url
 ):
-    """Confirm the security barrier flags a 413 Entity Too Large by mocking the header size check."""
+    """Confirm the security barrier flags a 413 Entity Too Large."""
     # Create a fake list of ZipInfo objects where one file reports an enormous size
     fake_info_1 = zipfile.ZipInfo("model.idf")
     fake_info_1.file_size = 100 * 1024 * 1024  # Force to 100MB in memory!
@@ -62,7 +92,7 @@ def test_initialize_workspace_fails_on_zip_bomb(
 
 
 def test_initialize_workspace_fails_on_illegal_extension(
-    api_client, mock_storage_env, illegal_extension_payload, valid_config_form_string, upload_url
+    api_client, illegal_extension_payload, valid_config_form_string, upload_url
 ):
     """Assert that foreign extensions purge target disk assets."""
     with open(illegal_extension_payload, "rb") as f:
@@ -76,9 +106,7 @@ def test_initialize_workspace_fails_on_illegal_extension(
     assert "Disallowed file extension detected" in response.json()["detail"]
 
 
-def test_initialize_workspace_invalid_config_json(
-    api_client, mock_storage_env, valid_zip_payload, upload_url
-):
+def test_initialize_workspace_invalid_config_json(api_client, valid_zip_payload, upload_url):
     """Verify that scrambled configurations break early at validation."""
     malformed_json_str = "{ 'simulation_tag': mismatched-quotes-no-closing "
 
@@ -94,7 +122,7 @@ def test_initialize_workspace_invalid_config_json(
 
 
 def test_initialize_workspace_missing_file_payload(
-    api_client, mock_storage_env, valid_config_form_string, upload_url
+    api_client, valid_config_form_string, upload_url
 ):
     """Verify that omitting the file entirely fails with standard FastAPI 422 validation errors."""
     response = api_client.post(

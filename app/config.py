@@ -14,6 +14,9 @@ class Settings(BaseSettings):
     # Authentication settings with default values for local development.
     jwt_secret_key: str = "fallback-local-development-key-never-use-in-prod"
     jwt_algorithm: str = "HS256"
+    # Dynamic Celery Routing Queues
+    celery_fast_lane_queue: str = "fast_lane"
+    celery_slow_lane_queue: str = "slow_lane"
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 

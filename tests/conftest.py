@@ -1,8 +1,9 @@
 """Fixtures for unit tests, including temporary storage isolation and sample data generation."""
 
 import zipfile
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
+import jwt
 import pytest
 from fastapi.testclient import TestClient
 
@@ -38,7 +39,7 @@ def mock_storage_env(tmp_path, monkeypatch):
 
 
 @pytest.fixture
-def api_client(mock_user_id):
+def api_client(mock_user_id, mock_storage_env):
     """Provides a pristine test client pointing to the isolated workspace with mocked auth."""
     from app.main import app
     from app.services.auth import get_current_user_id
@@ -50,6 +51,22 @@ def api_client(mock_user_id):
 
     # Clean up overrides after tests finish so it doesn't leak
     app.dependency_overrides.clear()
+
+
+@pytest.fixture
+def valid_auth_token(mock_user_id):
+    """Generates a genuine, cryptographically signed JWT token for the test user."""
+    # 1. Prepare the standard JWT payload format your app decodes
+    payload = {
+        "sub": mock_user_id,  # The subject: matches your expected 'user_dev_42' id string
+        "exp": datetime.now(timezone.utc) + timedelta(minutes=30),  # Token lifespan window
+        "iat": datetime.now(timezone.utc),
+    }
+
+    # 2. Sign the token utilizing the exact settings your production engine checks
+    token = jwt.encode(payload, settings.jwt_secret_key, algorithm=settings.jwt_algorithm)
+
+    return token
 
 
 # ==========================================
@@ -71,10 +88,8 @@ def sample_manifest():
 
 
 # ==========================================
-# Mock Input Files
+# Mock zip Payload and config
 # ==========================================
-
-
 @pytest.fixture
 def valid_zip_payload(tmp_path):
     """Generate a structurally valid simulation zip containing exactly 1 .idf and 1 .epw file."""
@@ -85,35 +100,6 @@ def valid_zip_payload(tmp_path):
     with zipfile.ZipFile(zip_file_path, "w") as zf:
         zf.writestr("model.idf", "Version, 23.2;\nBuilding, Urban Block Scenario;")
         zf.writestr("weather.epw", "EPW DATA, HAIFA ISRAEL, 2026;")
-
-    return zip_file_path
-
-
-@pytest.fixture
-def zip_bomb_payload(tmp_path):
-    """Generate a perfectly valid, non-corrupt ZIP file structure."""
-    zip_dir = tmp_path / "payloads"
-    zip_dir.mkdir(exist_ok=True)
-    zip_file_path = zip_dir / "zip_bomb.zip"
-
-    # Write a perfectly normal, tiny, healthy archive
-    with zipfile.ZipFile(zip_file_path, "w") as zf:
-        zf.writestr("model.idf", "Version, 23.2;")
-
-    return zip_file_path
-
-
-@pytest.fixture
-def illegal_extension_payload(tmp_path):
-    """Generate an archive holding a disallowed file extension execution risk."""
-    zip_dir = tmp_path / "payloads"
-    zip_dir.mkdir(exist_ok=True)
-    zip_file_path = zip_dir / "backdoor.zip"
-
-    with zipfile.ZipFile(zip_file_path, "w") as zf:
-        zf.writestr("exploit.py", "print('Malicious script execution block')")
-        zf.writestr("model.idf", "Version, 23.2;")
-        zf.writestr("weather.epw", "EPW DATA;")
 
     return zip_file_path
 

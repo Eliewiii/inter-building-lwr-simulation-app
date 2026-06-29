@@ -1,3 +1,5 @@
+"""Runner for the view factor computation task."""
+
 # app/workers/tasks_lwr_pre.py
 from celery import shared_task
 
@@ -6,13 +8,12 @@ from app.schemas import PipelinePhase, TaskContext
 from app.services.task_helpers import manage_task_state
 
 # Define the identity of this specific worker file
-CURRENT_PHASE = PipelinePhase.VF_COMP
+CURRENT_PHASE = PipelinePhase.VF_COMPUTATION
 
 
 @shared_task(bind=True)
-def run_lwr_preprocessing(self, context: dict):
+def run_vf_computation(self, context: dict):
     """Generates thermal matrices for the long-wave radiation solver."""
-
     task_context = TaskContext(**context)
 
     # The context manager abstracts EVERYTHING.

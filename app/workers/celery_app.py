@@ -1,7 +1,11 @@
+"""Configuration of Celery."""
+
 import os
 
 from celery import Celery
 from kombu import Queue
+
+from app.config import settings  # Import your settings instance
 
 # 1. Initialize the Celery App
 # The 'include' list tells Celery exactly which files to scan for @shared_task decorators.
@@ -19,14 +23,14 @@ celery_app = Celery(
 )
 
 # 2. Queue Configuration (The Fast/Slow Lanes)
-# Explicitly define the queues so your Docker containers can bind to them.
+# Pull queues dynamically from environment configuration
 celery_app.conf.task_queues = (
-    Queue("fast_lane"),
-    Queue("slow_lane"),
+    Queue(settings.celery_fast_lane_queue),
+    Queue(settings.celery_slow_lane_queue),
 )
 
-# Default routing: If a task gets fired without a specific queue, default to the slow lane.
-celery_app.conf.task_default_queue = "slow_lane"
+# Use the environment setting as the default queue boundary
+celery_app.conf.task_default_queue = settings.celery_slow_lane_queue
 
 # 3. High-Performance / Heavy Compute Tweaks
 celery_app.conf.update(

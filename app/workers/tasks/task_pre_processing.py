@@ -1,3 +1,5 @@
+"""Runner for the pre-processing task."""
+
 # app/workers/tasks_lwr_pre.py
 from celery import shared_task
 
@@ -10,9 +12,8 @@ CURRENT_PHASE = PipelinePhase.PRE_PROCESSING
 
 
 @shared_task(bind=True)
-def run_lwr_preprocessing(self, context: dict):
+def run_pre_processing(self, context: dict):
     """Generates thermal matrices for the long-wave radiation solver."""
-
     task_context = TaskContext(**context)
 
     # The context manager abstracts EVERYTHING.
