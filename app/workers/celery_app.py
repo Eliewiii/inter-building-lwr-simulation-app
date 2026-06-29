@@ -1,54 +1,43 @@
-"""Configuration of Celery."""
+"""Configuration engine for distributed Celery execution profiles and dynamic queue topologies."""
 
 import os
 
 from celery import Celery
 from kombu import Queue
 
-from app.config import settings  # Import your settings instance
+from app.config import settings
+from app.workers import tasks
 
-# 1. Initialize the Celery App
-# The 'include' list tells Celery exactly which files to scan for @shared_task decorators.
+# 1. Initialize the Celery App Context
+# Dynamically extract the underlying module string location to avoid hardcoded string tracking.
 celery_app = Celery(
     "simulation_pipeline",
     broker=os.getenv("REDIS_URL", "redis://localhost:6379/0"),
     backend=os.getenv("REDIS_URL", "redis://localhost:6379/0"),
-    include=[
-        "app.workers.tasks_preproc",
-        "app.workers.tasks_vf",
-        "app.workers.tasks_lwr_pre",
-        "app.workers.tasks_lwr_sim",
-        "app.workers.tasks_post",
-    ],
+    include=[tasks.__name__],  # Resolves automatically to "app.workers.tasks"
 )
 
 # 2. Queue Configuration (The Fast/Slow Lanes)
-# Pull queues dynamically from environment configuration
 celery_app.conf.task_queues = (
     Queue(settings.celery_fast_lane_queue),
     Queue(settings.celery_slow_lane_queue),
 )
 
-# Use the environment setting as the default queue boundary
+# Enforce the fallback queue directly from application environments
 celery_app.conf.task_default_queue = settings.celery_slow_lane_queue
 
-# 3. High-Performance / Heavy Compute Tweaks
+# 3. High-Performance / Heavy Compute Architectural Tuning
 celery_app.conf.update(
-    # VERY IMPORTANT FOR R&D:
-    # By default, a Celery worker reserves 4 tasks at a time per CPU core.
-    # For heavy spatial/thermal tasks, this will cause memory thrashing.
-    # Setting this to 1 forces the worker to only pull one task at a time.
+    # Disable pre-fetching boundaries to prevent memory thrashing on heavy numerical processes.
     worker_prefetch_multiplier=1,
-    # Do not tell Redis the task is "done" until the Python function actually returns.
-    # If a worker container runs out of RAM and is killed by the OS mid-calculation,
-    # the task will remain in Redis and can be retried automatically.
+    # Enforce late acknowledgments so dropped worker instances trigger automatic message requeuing.
     task_acks_late=True,
-    # State tracking
+    # Track runtime worker initializations for monitoring visibility
     task_track_started=True,
-    # We are passing pure Pydantic/JSON dictionaries around, nothing else.
+    # Strict serialization formatting definitions
     task_serializer="json",
     accept_content=["json"],
     result_serializer="json",
-    # Do not bloat Redis with old task results. Clear them after 24 hours.
+    # Prune historical results from backend data stores after 24 hours
     result_expires=86400,
 )

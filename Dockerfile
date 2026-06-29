@@ -29,10 +29,13 @@ FROM python:3.12-slim AS runner
 WORKDIR /code
 
 # Copy the compiled Python dependencies and app package from the builder stage
-# (This skips copying the heavy .git history into your final production layer)
 COPY --from=builder /build/deps /usr/local/lib/python3.12/site-packages
-COPY ./app /code/app
 
+# Create the dedicated data folder matching your .env value and adjust ownership
+RUN mkdir -p /app/data && chown -R 1001:1001 /app/data /code
+USER 1001
+
+ENV PYTHONUNBUFFERED=1
 EXPOSE 8000
 
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["python", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

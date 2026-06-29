@@ -14,8 +14,8 @@ class PipelineRunRequest(BaseModel):
 
     # Flags for which specific steps to execute
     run_pre_processing: bool = False
-    run_vf_comp: bool = False
-    run_lwr_preprocessing: bool = False
+    run_vf_computation: bool = False
+    run_lwr_pre_processing: bool = False
     run_lwr_simulation: bool = False
     run_post_processing: bool = False
 
@@ -98,11 +98,12 @@ class PipelinePhase(str, Enum):
 class ExecutionState(str, Enum):
     """Possible execution states."""
 
-    PENDING = "pending"
-    RUNNING = "running"
+    UNSTARTED = "unstarted"  # <-- Clean, explicit state for "not run yet"
+    PENDING = "pending"  # Means: Enqueued in the message broker lane
+    RUNNING = "running"  # Means: Active thread/process execution
     COMPLETED = "completed"
     FAILED = "failed"
-    INVALIDATED = "invalidated"  # For when parameters change!
+    INVALIDATED = "invalidated"
 
 
 # ==========================================
@@ -138,7 +139,7 @@ class SimulationManifest(BaseModel):
     # State tracking attributes
     # We replace the single string with a mapped dictionary
     phase_statuses: Dict[PipelinePhase, ExecutionState] = Field(
-        default_factory=lambda: {phase: ExecutionState.PENDING for phase in PipelinePhase}
+        default_factory=lambda: {phase: ExecutionState.UNSTARTED for phase in PipelinePhase}
     )
     error_message: Optional[str] = Field(
         default=None, description="Detailed error log if execution fails."

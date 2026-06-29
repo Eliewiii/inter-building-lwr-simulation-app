@@ -1,4 +1,4 @@
-"""Orchestrator engine managing topological pipeline execution, dependency validations, and Celery task chain dispatching."""
+"""Orchestrator engine managing topological pipeline execution and task chain dispatching."""
 
 from typing import Any, Callable, cast
 
@@ -16,28 +16,12 @@ from app.schemas import (
 )
 from app.services.state_manager import get_manifest, update_manifest
 from app.workers.tasks import (
+    PIPELINE_TOPOLOGY,
     run_lwr_pre_processing,
     run_lwr_simulation,
     run_post_processing,
     run_pre_processing,
     run_vf_computation,
-)
-
-# 1. Definitive Execution Topology & Field Mapping (Completely String-Free)
-PIPELINE_TOPOLOGY = (
-    (PipelinePhase.PRE_PROCESSING, lambda r: r.run_pre_processing, None),
-    (PipelinePhase.VF_COMPUTATION, lambda r: r.run_vf_comp, PipelinePhase.PRE_PROCESSING),
-    (
-        PipelinePhase.LWR_PRE_PROCESSING,
-        lambda r: r.run_lwr_preprocessing,
-        PipelinePhase.VF_COMPUTATION,
-    ),
-    (
-        PipelinePhase.LWR_SIMULATION,
-        lambda r: r.run_lwr_simulation,
-        PipelinePhase.LWR_PRE_PROCESSING,
-    ),
-    (PipelinePhase.POST_PROCESSING, lambda r: r.run_post_processing, PipelinePhase.LWR_SIMULATION),
 )
 
 TASK_MAP: dict[PipelinePhase, Callable[..., Any]] = {
@@ -52,18 +36,29 @@ TASK_MAP: dict[PipelinePhase, Callable[..., Any]] = {
 def _extract_ordered_phases(request: PipelineRunRequest) -> list[PipelinePhase]:
     """Evaluate request toggles against the execution matrix to derive an ordered phase list.
 
-    Iterates through the structural pipeline topology matrix sequentially and evaluates
-    the active request flags to determine which steps require scheduling.
+    Iterates through the structural pipeline topology matrix sequentially and evaluates the active
+    request flags to determine which steps require scheduling.
 
     Args:
-        request (PipelineRunRequest): Incoming data transfer schema tracking active
-            execution phase boolean configurations.
+        request (PipelineRunRequest): Incoming data transfer schema tracking active execution
+            phase boolean configurations.
 
     Returns:
         list[PipelinePhase]: Collection of filtered pipeline phases arranged in strict
             topological order.
     """
-    return [phase for phase, check_flag, _ in PIPELINE_TOPOLOGY if check_flag(request)]
+    ordered_phases: list[PipelinePhase] = []
+
+    for phase, structural_phase, _ in PIPELINE_TOPOLOGY:
+        # Map enum name "PRE_PROCESSING" to attribute "run_pre_processing"
+        field_name = f"run_{structural_phase.value.lower()}"
+
+        # Extract the boolean toggle from the Pydantic request object dynamically
+        is_enabled = getattr(request, field_name, False)
+        if is_enabled:
+            ordered_phases.append(phase)
+
+    return ordered_phases
 
 
 def _validate_execution_request(

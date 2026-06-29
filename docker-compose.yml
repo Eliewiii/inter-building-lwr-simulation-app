@@ -1,38 +1,63 @@
 version: '3.8'
 
 services:
-  # 1. The Message Broker
+  # Distributed Task Message Broker
   redis:
-    image: redis:7-alpine
+    image: redis:7.2-alpine
+    container_name: sim_broker_core
     ports:
       - "6379:6379"
+    networks:
+      - sim_fabric_net
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 5s
+      timeout: 3s
+      retries: 5
 
-  # 2. The FastAPI Web Server
+  # FastAPI Gateway Endpoint Router
   api:
-    build: .
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000
+    build:
+      context: .
+      target: runner
+    container_name: sim_gateway_api
     ports:
       - "8000:8000"
-    volumes:
-      - ./user_workspace:${CONTAINER_DATA_PATH}
-    env_file:
-      - .env
     environment:
       - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/1
+      # Pass through your native environment key
+      - CONTAINER_DATA_PATH=${CONTAINER_DATA_PATH}
+      - STORAGE_QUOTA_MB=${STORAGE_QUOTA_MB}
+    volumes:
+      # Bind your local machine's directory to your exact /app/data target
+      - ${HOST_DATA_PATH}:${CONTAINER_DATA_PATH}
+    networks:
+      - sim_fabric_net
     depends_on:
-      - redis
+      redis:
+        condition: service_healthy
 
-  # 3. The Background Simulation Worker
+  # Parallel Task Execution Worker Node
   worker:
-    build: .
-    # This command starts Celery instead of the web server
-    command: celery -A app.main.celery_app worker --loglevel=info
-    volumes:
-      # The worker ALSO needs access to the mounted files to read inputs and write outputs
-      - ./user_workspace:${CONTAINER_DATA_PATH}
-    env_file:
-      - .env
+    build:
+      context: .
+      target: runner
+    container_name: sim_compute_worker
+    command: python -m celery -A app.workers.celery_app worker --loglevel=info -c 4
     environment:
       - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/1
+      - CONTAINER_DATA_PATH=${CONTAINER_DATA_PATH}
+      - STORAGE_QUOTA_MB=${STORAGE_QUOTA_MB}
+    volumes:
+      - ${HOST_DATA_PATH}:${CONTAINER_DATA_PATH}
+    networks:
+      - sim_fabric_net
     depends_on:
-      - redis
+      redis:
+        condition: service_healthy
+
+networks:
+  sim_fabric_net:
+    driver: bridge

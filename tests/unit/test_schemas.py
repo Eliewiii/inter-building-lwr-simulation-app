@@ -72,7 +72,7 @@ def test_pipeline_config_optional_description_defaults_to_none():
 
 
 def test_simulation_manifest_initializes_with_correct_phase_map():
-    """Verify that a new manifest automatically populates all pipeline phases as PENDING."""
+    """Verify that a new manifest automatically populates all pipeline phases as UNSTARTED."""
     now = datetime.now(timezone.utc)
 
     manifest = SimulationManifest(
@@ -87,10 +87,10 @@ def test_simulation_manifest_initializes_with_correct_phase_map():
     assert manifest.user_id == "user_dev_88"
     assert manifest.creation_time == now
 
-    # Assert that all declared phases exist and default to PENDING status tracking
+    # Assert that all declared phases exist and default to UNSTARTED status tracking
     assert len(manifest.phase_statuses) == len(PipelinePhase)
     for phase in PipelinePhase:
-        assert manifest.phase_statuses[phase] == ExecutionState.PENDING
+        assert manifest.phase_statuses[phase] == ExecutionState.UNSTARTED
 
     # Assert tracking dicts and attributes default safely
     assert manifest.error_message is None
@@ -115,7 +115,9 @@ def test_simulation_manifest_serialization():
     assert hydrated_manifest.simulation_id == manifest.simulation_id
     assert hydrated_manifest.user_tag == "baseline"
     # Note: Pydantic normalizes timezones cleanly to string timestamps
-    assert hydrated_manifest.phase_statuses[PipelinePhase.VF_COMP] == ExecutionState.PENDING
+    assert (
+        hydrated_manifest.phase_statuses[PipelinePhase.VF_COMPUTATION] == ExecutionState.UNSTARTED
+    )
 
 
 # TODO : add tests for the paramters if it makes sense.
