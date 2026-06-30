@@ -29,6 +29,7 @@ services:
       # Pass through your native environment key
       - CONTAINER_DATA_PATH=${CONTAINER_DATA_PATH}
       - STORAGE_QUOTA_MB=${STORAGE_QUOTA_MB}
+      - DEV_MODE=${DEV_MODE}
     volumes:
       # Bind your local machine's directory to your exact /app/data target
       - ${HOST_DATA_PATH}:${CONTAINER_DATA_PATH}

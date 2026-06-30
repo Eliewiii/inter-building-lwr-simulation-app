@@ -1,7 +1,6 @@
 # ==========================================
 # Git / Source Control
 # ==========================================
-.git
 .gitignore
 .github/
 
@@ -16,7 +15,6 @@ __pycache__/
 .ruff_cache/
 .coverage
 htmlcov/
-.env
 
 # ==========================================
 # Virtual Environments & Build Artifacts

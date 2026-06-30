@@ -18,6 +18,8 @@ class Settings(BaseSettings):
     celery_fast_lane_queue: str = "fast_lane"
     celery_slow_lane_queue: str = "slow_lane"
 
+    dev_mode: bool = False
+
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 
 
