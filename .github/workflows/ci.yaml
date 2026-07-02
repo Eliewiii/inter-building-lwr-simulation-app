@@ -39,18 +39,18 @@ jobs:
       - name: Run Tests (Pytest)
         run: pytest -m "not system and not debug and not simulation"
 
-#   # PHASE 2: Heavy Containerized Integration
-#   container-integration:
-#     needs: fast-checks
-#     runs-on: ubuntu-latest
-#     steps:
-#       - uses: actions/checkout@v4
-#       - name: Build Stack
-#         run: docker compose build
-#       - name: Start Services
-#         run: docker compose up -d
-#       - name: Run Containerized Integration Tests
-#         run: docker compose exec -T api pytest /app/tests/integration
+  # PHASE 2: Heavy Containerized Integration
+  container-integration:
+    needs: fast-checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build Stack
+        run: docker compose build
+      - name: Start Services
+        run: docker compose up -d
+      - name: Run Containerized Integration Tests
+        run: docker compose exec -T api pytest /app/tests/integration
 
 #   # PHASE 3: End-to-End Testing
 #   e2e-testing:

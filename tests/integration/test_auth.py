@@ -1,6 +1,10 @@
 """Authentication middleware interception and token validation boundaries."""
 
+import pytest
+
 from app.services.auth import get_current_user_id
+
+pytestmark = [pytest.mark.integration]
 
 
 def test_real_auth_rejects_missing_token(api_client, upload_url):
