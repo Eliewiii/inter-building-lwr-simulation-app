@@ -31,7 +31,7 @@ WORKDIR /code
 # Copy the compiled Python dependencies and app package from the builder stage
 COPY --from=builder /build/deps /usr/local/lib/python3.12/site-packages
 
-# Create the dedicated data folder matching your .env value and adjust ownership
+# Create the dedicated data folder matching .env value and adjust ownership
 RUN mkdir -p /app/data && chown -R 1001:1001 /app/data /code
 USER 1001
 

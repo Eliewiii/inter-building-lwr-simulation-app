@@ -2,15 +2,16 @@ name: CI - SimGateway-LWR Hybrid Pipeline
 
 on:
   push:
-    branches: [ main ]
+    branches: [main]
     paths:
-      - 'src/**'
-      - 'app/**'
-      - 'tests/**'
-      - 'Dockerfile'
-      - 'docker-compose.yml'
+      - ".github/workflows/ci.yml"
+      - "src/**"
+      - "app/**"
+      - "tests/**"
+      - "Dockerfile"
+      - "docker-compose.yml"
   pull_request:
-    branches: [ main ]
+    branches: [main]
 
 jobs:
   # PHASE 1: Fast Host-Side Validation
@@ -20,12 +21,12 @@ jobs:
       - uses: actions/checkout@v4
       - name: Set up Python
         uses: actions/setup-python@v5
-        with: { python-version: '3.12', cache: 'pip' }
+        with: { python-version: "3.12", cache: "pip" }
       - name: Install Dependencies
         run: |
           pip install .
           pip install -r requirements.txt
-     # Linter
+      # Linter
       - name: Run Linter (Ruff)
         run: ruff check .
       # Type Checker
@@ -45,27 +46,39 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      - name: Define Storage Path
+        run: |
+          # Create the path and save it to the environment file so 
+          # all subsequent steps can access it as an environment variable
+          echo "HOST_DATA_PATH=${{ runner.temp }}/storage" >> $GITHUB_ENV
+          mkdir -p ${{ runner.temp }}/storage
+
       - name: Build Stack
         run: docker compose build
+
       - name: Start Services
-        run: docker compose up -d
-      - name: Run Containerized Integration Tests
+        # Because we used $GITHUB_ENV, HOST_DATA_PATH is now
+        # available as a native shell variable
+        run: HOST_DATA_PATH=$HOST_DATA_PATH docker compose up -d
+
+      - name: Run Integration Tests
         run: docker compose exec -T api pytest /app/tests/integration
 
 #   # PHASE 3: End-to-End Testing
 #   e2e-testing:
-#     needs: container-integration 
+#     needs: container-integration
 #     runs-on: ubuntu-latest
 #     steps:
 #       - uses: actions/checkout@v4
 #       - name: Set up Python
 #         uses: actions/setup-python@v5
 #         with: { python-version: '3.12' }
-      
+
 #       # Install only the lightweight testing dependencies (e.g., httpx)
 #       - name: Install Test Dependencies
 #         run: pip install .
 #         run: pip install httpx pytest
-        
+
 #       - name: Run E2E Tests against live containers
 #         run: pytest tests/e2e/
