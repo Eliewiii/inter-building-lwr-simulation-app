@@ -58,8 +58,6 @@ jobs:
         run: docker compose build
 
       - name: Start Services
-        # Because we used $GITHUB_ENV, HOST_DATA_PATH is now
-        # available as a native shell variable
         run: HOST_DATA_PATH=$HOST_DATA_PATH docker compose up -d
 
       - name: Run Integration Tests

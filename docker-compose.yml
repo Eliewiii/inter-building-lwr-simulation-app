@@ -1,5 +1,16 @@
 version: '3.8'
 
+# Shared configuration template to keep the services DRY
+x-common-config: &common-config
+  environment:
+    - CELERY_BROKER_URL=redis://redis:6379/0
+    - CELERY_RESULT_BACKEND=redis://redis:6379/1
+    - CONTAINER_DATA_PATH=${CONTAINER_DATA_PATH:-/app/data}
+    - STORAGE_QUOTA_MB=${STORAGE_QUOTA_MB:-50}
+    - DEV_MODE=${DEV_MODE:-false}
+  volumes:
+    - ${HOST_DATA_PATH:-./simulation_storage_vault}:${CONTAINER_DATA_PATH:-/app/data}
+
 services:
   # Distributed Task Message Broker
   redis:
@@ -17,22 +28,13 @@ services:
 
   # FastAPI Gateway Endpoint Router
   api:
+    <<: *common-config
     build:
       context: .
       target: runner
     container_name: sim_gateway_api
     ports:
       - "8000:8000"
-    environment:
-      - CELERY_BROKER_URL=redis://redis:6379/0
-      - CELERY_RESULT_BACKEND=redis://redis:6379/1
-      # Pass through your native environment key
-      - CONTAINER_DATA_PATH=${CONTAINER_DATA_PATH:-/app/data}
-      - STORAGE_QUOTA_MB=${STORAGE_QUOTA_MB:-50}
-      - DEV_MODE=${DEV_MODE:-false}
-    volumes:
-      # Bind your local machine's directory to your exact /app/data target
-      - ${HOST_DATA_PATH}:${CONTAINER_DATA_PATH}
     networks:
       - sim_fabric_net
     depends_on:
@@ -41,18 +43,12 @@ services:
 
   # Parallel Task Execution Worker Node
   worker:
+    <<: *common-config
     build:
       context: .
       target: runner
     container_name: sim_compute_worker
     command: python -m celery -A app.workers.celery_app worker --loglevel=info -c 4
-    environment:
-      - CELERY_BROKER_URL=redis://redis:6379/0
-      - CELERY_RESULT_BACKEND=redis://redis:6379/1
-      - CONTAINER_DATA_PATH=${CONTAINER_DATA_PATH:-/app/data}
-      - STORAGE_QUOTA_MB=${STORAGE_QUOTA_MB:-50}
-    volumes:
-      - ${HOST_DATA_PATH}:${CONTAINER_DATA_PATH}
     networks:
       - sim_fabric_net
     depends_on:
