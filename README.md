@@ -13,6 +13,7 @@ Actions](https://img.shields.io/badge/CI-GitHub_Actions-2088FF?style=for-the-bad
 ![Ruff](https://img.shields.io/badge/Linter-Ruff-FCC21B?style=for-the-badge)
 ![HPC](https://img.shields.io/badge/HPC-Parallel%20Computing-blueviolet?style=for-the-badge)
 ![License](https://img.shields.io/badge/license-MIT-green?style=for-the-badge)
+[![CI - SimGateway-LWR Hybrid Pipeline](https://github.com/Eliewiii/inter-building-lwr-simulation-app/actions/workflows/ci.yml/badge.svg)](https://github.com/Eliewiii/inter-building-lwr-simulation-app/actions/workflows/ci.yml)
 
 **SimGateway-LWR** is a production-grade backend gateway and distributed task architecture
 engineered to orchestrate large-scale inter-building coupled UBES (urban building energy simulation)

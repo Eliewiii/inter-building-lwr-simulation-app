@@ -1,5 +1,3 @@
-version: '3.8'
-
 # Shared configuration template to keep the services DRY
 x-common-config: &common-config
   environment:
