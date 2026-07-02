@@ -2,7 +2,7 @@ name: CI - SimGateway-LWR Hybrid Pipeline
 
 on:
   push:
-    branches: [ master ]
+    branches: [ main ]
     paths:
       - 'src/**'
       - 'app/**'
@@ -10,7 +10,7 @@ on:
       - 'Dockerfile'
       - 'docker-compose.yml'
   pull_request:
-    branches: [ master ]
+    branches: [ main ]
 
 jobs:
   # PHASE 1: Fast Host-Side Validation
