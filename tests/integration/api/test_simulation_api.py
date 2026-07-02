@@ -2,9 +2,12 @@
 
 from unittest.mock import patch
 
+import pytest
 from fastapi.testclient import TestClient
 
 from app.schemas import SimulationManifest
+
+pytestmark = [pytest.mark.integration]
 
 
 def test_pipeline_execution_via_http_post_route(

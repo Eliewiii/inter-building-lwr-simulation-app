@@ -8,6 +8,8 @@ import pytest
 from app.schemas import ExecutionState, PipelinePhase
 from app.services import state_manager
 
+pytestmark = [pytest.mark.integration]
+
 
 @pytest.fixture
 def zip_bomb_payload(tmp_path):

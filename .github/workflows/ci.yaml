@@ -1,0 +1,71 @@
+name: CI - SimGateway-LWR Hybrid Pipeline
+
+on:
+  push:
+    branches: [ master ]
+    paths:
+      - 'src/**'
+      - 'app/**'
+      - 'tests/**'
+      - 'Dockerfile'
+      - 'docker-compose.yml'
+  pull_request:
+    branches: [ master ]
+
+jobs:
+  # PHASE 1: Fast Host-Side Validation
+  fast-checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with: { python-version: '3.12', cache: 'pip' }
+      - name: Install Dependencies
+        run: |
+          pip install .
+          pip install -r requirements.txt
+     # Linter
+      - name: Run Linter (Ruff)
+        run: ruff check .
+      # Type Checker
+      - name: Run Pyright
+        uses: jakebailey/pyright-action@v2
+        with:
+          annotate: all
+          warnings: false
+          lib: false
+      # Test Runner (Pytest)
+      - name: Run Tests (Pytest)
+        run: pytest -m "not system and not debug and not simulation"
+
+#   # PHASE 2: Heavy Containerized Integration
+#   container-integration:
+#     needs: fast-checks
+#     runs-on: ubuntu-latest
+#     steps:
+#       - uses: actions/checkout@v4
+#       - name: Build Stack
+#         run: docker compose build
+#       - name: Start Services
+#         run: docker compose up -d
+#       - name: Run Containerized Integration Tests
+#         run: docker compose exec -T api pytest /app/tests/integration
+
+#   # PHASE 3: End-to-End Testing
+#   e2e-testing:
+#     needs: container-integration 
+#     runs-on: ubuntu-latest
+#     steps:
+#       - uses: actions/checkout@v4
+#       - name: Set up Python
+#         uses: actions/setup-python@v5
+#         with: { python-version: '3.12' }
+      
+#       # Install only the lightweight testing dependencies (e.g., httpx)
+#       - name: Install Test Dependencies
+#         run: pip install .
+#         run: pip install httpx pytest
+        
+#       - name: Run E2E Tests against live containers
+#         run: pytest tests/e2e/

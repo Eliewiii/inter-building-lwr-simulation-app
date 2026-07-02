@@ -7,6 +7,8 @@ import pytest
 from app.schemas import ExecutionState, PipelinePhase, PipelineRunRequest, SimulationManifest
 from app.services.orchestrator import schedule_pipeline
 
+pytestmark = [pytest.mark.integration]
+
 
 @pytest.fixture
 def configure_eager_celery():
