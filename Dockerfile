@@ -2,29 +2,37 @@
 # STAGE 1: Builder
 # ==============================================================================
 FROM python:3.12-slim AS builder
-WORKDIR /build
 
-RUN apt-get update && apt-get install -y --no-install-recommends git && rm -rf /var/lib/apt/lists/*
+# Define the APP_HOME once
+ENV APP_HOME=/code
+WORKDIR $APP_HOME
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    git && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
-# Remove the --target flag. This installs into the standard location for this stage
+# Use the APP_HOME variable for paths
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
-RUN pip install .
+RUN pip install . 
 
 # ==============================================================================
-# STAGE 2: Final Runner (Production Image)
+# STAGE 2: Final Runner
 # ==============================================================================
 FROM python:3.12-slim AS runner
-WORKDIR /code
 
-# Copy the entire standard site-packages from the builder
+# Use the same APP_HOME variable
+ENV APP_HOME=/code
+WORKDIR $APP_HOME
+
+# Copy from builder using the variable
 COPY --from=builder /usr/local/lib/python3.12/site-packages /usr/local/lib/python3.12/site-packages
-# Copy the binary scripts as well
 COPY --from=builder /usr/local/bin /usr/local/bin
+COPY --from=builder $APP_HOME $APP_HOME
 
-RUN mkdir -p /app/data && chown -R 1001:1001 /app/data /code
+# Create data folder and adjust ownership
+RUN mkdir -p /app/data && chown -R 1001:1001 /app/data $APP_HOME
 USER 1001
 
 ENV PYTHONUNBUFFERED=1

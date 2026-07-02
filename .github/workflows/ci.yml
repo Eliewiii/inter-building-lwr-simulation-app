@@ -61,7 +61,7 @@ jobs:
         run: HOST_DATA_PATH=$HOST_DATA_PATH docker compose up -d
 
       - name: Run Integration Tests
-        run: docker compose exec -T api pytest /app/tests/integration
+        run: docker compose exec -T api python -m pytest tests/integration
 
 #   # PHASE 3: End-to-End Testing
 #   e2e-testing:
