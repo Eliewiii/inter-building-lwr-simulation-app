@@ -35,6 +35,7 @@ backbone of ongoing operational R&D.
   being translated from validated, existing scientific packages developed during doctoral research
   at the Technion. Native containerized end-to-end integration verification is scheduled for
   upcoming development sprints.
+* **Local Cloud Emulation (Next Step):** Deployment architecture is currently being mapped to AWS-native service patterns (ECS/Fargate/S3). The immediate objective is to implement a robust, local emulated environment to validate configuration parity and IAM security policies before enterprise cloud promotion.
 
 ---
 
